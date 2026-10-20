@@ -1,0 +1,21 @@
+[project]
+name = "email-triage"
+version = "0.1.0"
+description = "Daily email triage digest: Gmail (read-only) -> cheap model -> Telegram"
+requires-python = ">=3.11"
+dependencies = [
+    "anthropic>=1.16",
+    "pydantic>=2.7",
+    "google-api-python-client>=2.130",
+    "google-auth-oauthlib>=1.2",
+    "requests>=2.31",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8"]
+
+[tool.setuptools.packages.find]
+include = ["triage*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

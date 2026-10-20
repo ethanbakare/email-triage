@@ -1,0 +1,30 @@
+# Copy to config.toml and edit. Secrets never go in this file: they come from
+# environment variables (ANTHROPIC_API_KEY, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID).
+
+[run]
+lookback_hours = 24          # first run only; later runs pick up where the last good one ended
+timezone = "Europe/London"   # used for the times shown in the digest
+
+[gmail]
+credentials_file = "secrets/credentials.json"   # OAuth client from Google Cloud Console
+token_file = "secrets/token.json"               # written by `python -m triage auth`
+max_emails = 500
+
+[models]
+enabled = true               # false = counts only, no model calls
+provider = "anthropic"       # swappable: add an adapter in triage/providers/
+classifier = "claude-haiku-5-5"
+summariser = "claude-haiku-5-5"   # try "claude-sonnet-5-5" if summaries feel thin
+max_body_chars = 4000
+
+[rules]
+# Senders sorted by plain code, with no model call. Full address or domain.
+newsletter_senders = ["flipboard.com"]
+ignore_senders = []
+
+[telegram]
+# chat_id can also come from TELEGRAM_CHAT_ID
+chat_id = ""
+
+[store]
+path = "data/triage.db"
