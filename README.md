@@ -61,66 +61,64 @@ python -m pytest                 # 17 tests, all offline
 python -m triage run --dry-run   # sample emails + fake model, prints a digest
 ```
 
-## Set up for real (about 30 minutes, once)
+## Set up (about 20 minutes, once, all in a browser)
 
-These steps need your own Google, Telegram and Anthropic accounts.
+The digest runs in GitHub's cloud on a schedule (`.github/workflows/digest.yml`),
+so no computer needs to be on. You only need to create three accounts' worth of
+keys and paste them into the repo's secrets: **Settings → Secrets and variables →
+Actions → New repository secret**.
 
-**1. Config and secrets folder**
+**1. Gmail, read-only** (Google requires the account owner to click consent)
 
-```bash
-cp config.example.toml config.toml
-mkdir -p secrets && touch secrets/env && chmod 600 secrets/env
-```
-
-**2. Gmail read-only access** (Google requires you to click consent yourself)
-
-1. Go to [console.cloud.google.com](https://console.cloud.google.com), create a project called `email-triage`.
+1. Go to [console.cloud.google.com](https://console.cloud.google.com) and create a project called `email-triage`.
 2. APIs & Services → Library → search **Gmail API** → Enable.
-3. Google Auth Platform → Branding/Audience: user type **External**, app name `email-triage`,
-   your email as support and developer contact. Under Data access add the scope
-   `https://www.googleapis.com/auth/gmail.readonly`. Under Audience add your Gmail address as a test user.
-4. Under Audience, click **Publish app**. If you skip this, Google expires the sign-in every 7 days
-   and the digest stops. For your own account an unverified app is fine; you'll see a
-   "Google hasn't verified this app" warning once, click Advanced → continue.
-5. Clients → Create client → **Desktop app** → download the JSON and save it as `secrets/credentials.json`.
-6. Run `python -m triage auth`. A browser opens; sign in and allow read access.
-   This writes `secrets/token.json`.
+3. Google Auth Platform → Branding: app name `email-triage`, your email as support and developer contact.
+   Audience: **External**. Data access: add the scope `https://www.googleapis.com/auth/gmail.readonly`.
+4. Audience → **Publish app**. If you skip this, Google expires the sign-in every 7 days and the
+   digest stops. An unverified app is fine for your own account.
+5. Clients → Create client → **Web application**. Under Authorized redirect URIs add
+   `https://developers.google.com/oauthplayground`. Copy the client ID and client secret.
+6. Open the [OAuth Playground](https://developers.google.com/oauthplayground). Click the gear icon,
+   tick **Use your own OAuth credentials**, paste the client ID and secret.
+7. In the box under the API list type `https://www.googleapis.com/auth/gmail.readonly`, click
+   **Authorize APIs**, sign in, and accept the "unverified app" warning (Advanced → continue).
+8. Click **Exchange authorization code for tokens** and copy the refresh token.
+9. Add three secrets: `GMAIL_CLIENT_ID`, `GMAIL_CLIENT_SECRET`, `GMAIL_REFRESH_TOKEN`.
 
-**3. Telegram bot** (Telegram only lets you create a bot from your own account)
+**2. Telegram** (bots can only be created from your own Telegram account)
 
-1. In Telegram, message **@BotFather**, send `/newbot`, pick a name. It replies with a token.
-2. Add `TELEGRAM_BOT_TOKEN=<token>` to `secrets/env`.
-3. Send any message to your new bot, then run
-   `set -a; source secrets/env; set +a; python -m triage telegram-chat-id`
-   and add the `TELEGRAM_CHAT_ID=...` line it prints to `secrets/env`.
+1. In Telegram, message **@BotFather**, send `/newbot`, pick a name. Save the token as secret `TELEGRAM_BOT_TOKEN`.
+2. Message **@userinfobot**; it replies with your numeric id. Save it as secret `TELEGRAM_CHAT_ID`.
+3. Send any message to your new bot once, so it is allowed to message you.
 
-**4. Anthropic API key**
+**3. Anthropic API key**
 
-Create a key at [platform.claude.com](https://platform.claude.com) → API keys and add
-`ANTHROPIC_API_KEY=<key>` to `secrets/env`.
+Create a key at [platform.claude.com](https://platform.claude.com) → API keys. Save it as secret `ANTHROPIC_API_KEY`.
 
-**5. Test, then schedule**
+**4. Test it**
+
+Actions tab → **Email digest** → Run workflow. Pick mode `no-model` first (counts only, proves
+Gmail and Telegram work), then `full`. After that it runs by itself at 07:07 UTC daily; edit the
+cron line in `.github/workflows/digest.yml` to change it (for every 5 hours: `7 */5 * * *`).
+
+### Running on your own computer instead
 
 ```bash
-./run.sh --no-model   # counts only, no model cost: proves Gmail and Telegram work
-./run.sh --print      # full run, printed here instead of sent
-./run.sh              # full run, sent to your phone
+python3 -m venv .venv && . .venv/bin/activate && pip install -e .
+cp config.example.toml config.toml
+mkdir -p secrets && touch secrets/env && chmod 600 secrets/env   # put the same secrets here as KEY=value lines
+python -m triage auth      # alternative to the OAuth Playground: needs secrets/credentials.json (Desktop app client)
+./run.sh --no-model        # then ./run.sh --print, then ./run.sh
 ```
 
-Then `crontab -e` and add one line (07:07 daily; avoid :00, when lots of jobs start):
-
-```
-7 7 * * * /full/path/to/email-triage/run.sh >> /full/path/to/email-triage/data/cron.log 2>&1
-```
-
-For every 5 hours instead: `0 */5 * * *`. Cron only runs while the computer is awake,
-so for a laptop either keep it on or move this to a small always-on server later.
+Schedule with `crontab -e`: `7 7 * * * /full/path/to/email-triage/run.sh >> /full/path/to/email-triage/data/cron.log 2>&1`.
 
 ## Privacy notes
 
 - Gmail access is read-only. Nothing is ever sent, archived or deleted.
 - Claude API data is not used for training. Avoid Batch and Files APIs and the
   Fable/Mythos models, which retain data; Haiku and Sonnet are used here.
+- Cloud runs happen on GitHub's servers, which see email text while the run lasts; the run log never prints it.
 - Telegram's servers see the digest text. Fine for your own inbox; replace it
   before handling anyone else's mail.
 - Secrets live only in `secrets/` and environment variables, both git-ignored.

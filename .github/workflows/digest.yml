@@ -1,0 +1,59 @@
+# Runs the digest in GitHub's cloud, so no computer has to be on.
+# Secrets are set in the repo: Settings → Secrets and variables → Actions.
+name: Email digest
+
+on:
+  schedule:
+    - cron: "7 7 * * *"   # 07:07 UTC daily. For every 5 hours use "7 */5 * * *".
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "full, or no-model (counts only, no model cost)"
+        default: full
+
+permissions:
+  contents: read
+
+concurrency:
+  group: email-digest
+  cancel-in-progress: false
+
+jobs:
+  digest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - run: pip install .
+
+      # Keeps run history between runs so each digest starts where the last one ended.
+      # Holds metadata only (sender, category), never email bodies.
+      - uses: actions/cache@v4
+        with:
+          path: data/triage.db
+          key: triage-db-${{ github.run_id }}
+          restore-keys: triage-db-
+
+      - name: Write config
+        run: cp config.example.toml config.toml
+
+      - name: Run digest
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GMAIL_CLIENT_ID: ${{ secrets.GMAIL_CLIENT_ID }}
+          GMAIL_CLIENT_SECRET: ${{ secrets.GMAIL_CLIENT_SECRET }}
+          GMAIL_REFRESH_TOKEN: ${{ secrets.GMAIL_REFRESH_TOKEN }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          MODE: ${{ inputs.mode || 'full' }}
+        run: |
+          if [ "$MODE" = "no-model" ]; then
+            python -m triage run --no-model
+          else
+            python -m triage run
+          fi

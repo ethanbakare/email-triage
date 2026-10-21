@@ -24,3 +24,5 @@ def run_auth(credentials_file: Path, token_file: Path) -> None:
     token_file.write_text(creds.to_json())
     token_file.chmod(0o600)
     print(f"Saved Gmail token to {token_file} (read-only access).")
+    print("For cloud runs, add these as GitHub repository secrets:")
+    print("  GMAIL_CLIENT_ID, GMAIL_CLIENT_SECRET, GMAIL_REFRESH_TOKEN (values are in the token file)")

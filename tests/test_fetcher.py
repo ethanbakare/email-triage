@@ -1,6 +1,21 @@
 import base64
+from pathlib import Path
 
-from triage.stages.fetcher import parse_gmail_message
+import pytest
+
+from triage.stages.fetcher import GMAIL_SCOPES, load_credentials, parse_gmail_message
+
+
+def test_credentials_from_env_are_read_only():
+    env = {"GMAIL_CLIENT_ID": "id", "GMAIL_CLIENT_SECRET": "secret", "GMAIL_REFRESH_TOKEN": "refresh"}
+    creds = load_credentials(Path("missing.json"), env=env)
+    assert creds.refresh_token == "refresh"
+    assert list(creds.scopes) == GMAIL_SCOPES == ["https://www.googleapis.com/auth/gmail.readonly"]
+
+
+def test_missing_credentials_say_what_to_do():
+    with pytest.raises(RuntimeError, match="GMAIL_REFRESH_TOKEN"):
+        load_credentials(Path("missing.json"), env={})
 
 
 def b64(s: str) -> str:

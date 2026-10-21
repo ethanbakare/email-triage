@@ -9,6 +9,7 @@ from __future__ import annotations
 import base64
 import html
 import json
+import os
 import re
 from datetime import datetime, timezone
 from email.utils import parseaddr, parsedate_to_datetime
@@ -24,18 +25,40 @@ class Mailbox(Protocol):
     def fetch_since(self, since: datetime, limit: int) -> list[Email]: ...
 
 
+GMAIL_ENV = ("GMAIL_CLIENT_ID", "GMAIL_CLIENT_SECRET", "GMAIL_REFRESH_TOKEN")
+
+
+def load_credentials(token_file: Path, env: dict | None = None):
+    """Credentials from GMAIL_* environment variables (cloud runs) or a local token file."""
+    from google.oauth2.credentials import Credentials
+
+    env = os.environ if env is None else env
+    if all(env.get(k) for k in GMAIL_ENV):
+        return Credentials(
+            token=None,
+            refresh_token=env["GMAIL_REFRESH_TOKEN"],
+            client_id=env["GMAIL_CLIENT_ID"],
+            client_secret=env["GMAIL_CLIENT_SECRET"],
+            token_uri="https://oauth2.googleapis.com/token",
+            scopes=GMAIL_SCOPES,
+        )
+    if token_file.exists():
+        return Credentials.from_authorized_user_file(str(token_file), GMAIL_SCOPES)
+    raise RuntimeError(
+        f"No Gmail credentials: set {', '.join(GMAIL_ENV)} or run `python -m triage auth` to create {token_file}"
+    )
+
+
 class GmailMailbox:
     def __init__(self, token_file: Path):
         from google.auth.transport.requests import Request
-        from google.oauth2.credentials import Credentials
         from googleapiclient.discovery import build
 
-        creds = Credentials.from_authorized_user_file(str(token_file), GMAIL_SCOPES)
+        creds = load_credentials(token_file)
         if not creds.valid and creds.refresh_token:
             creds.refresh(Request())
-            token_file.write_text(creds.to_json())
         if not creds.valid:
-            raise RuntimeError(f"Gmail token in {token_file} is invalid; run `python -m triage auth` again")
+            raise RuntimeError("Gmail credentials are invalid; sign in again (README, step 2)")
         self.service = build("gmail", "v1", credentials=creds, cache_discovery=False)
 
     def fetch_since(self, since: datetime, limit: int) -> list[Email]:
