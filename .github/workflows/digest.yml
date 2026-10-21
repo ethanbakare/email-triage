@@ -23,26 +23,55 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
+      # Until every secret is set, scheduled runs skip quietly instead of failing.
+      - name: Check secrets
+        id: secrets
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GMAIL_CLIENT_ID: ${{ secrets.GMAIL_CLIENT_ID }}
+          GMAIL_CLIENT_SECRET: ${{ secrets.GMAIL_CLIENT_SECRET }}
+          GMAIL_REFRESH_TOKEN: ${{ secrets.GMAIL_REFRESH_TOKEN }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          MODE: ${{ inputs.mode || 'full' }}
+        run: |
+          required="GMAIL_CLIENT_ID GMAIL_CLIENT_SECRET GMAIL_REFRESH_TOKEN TELEGRAM_BOT_TOKEN TELEGRAM_CHAT_ID"
+          [ "$MODE" = "no-model" ] || required="$required ANTHROPIC_API_KEY"
+          missing=""
+          for name in $required; do [ -n "${!name}" ] || missing="$missing $name"; done
+          if [ -n "$missing" ]; then
+            echo "::notice::Skipping: secrets not set yet:$missing (see README, Set up)"
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+
       - uses: actions/checkout@v4
+        if: steps.secrets.outputs.ready == 'true'
 
       - uses: actions/setup-python@v5
+        if: steps.secrets.outputs.ready == 'true'
         with:
           python-version: "3.12"
 
       - run: pip install .
+        if: steps.secrets.outputs.ready == 'true'
 
       # Keeps run history between runs so each digest starts where the last one ended.
       # Holds metadata only (sender, category), never email bodies.
       - uses: actions/cache@v4
+        if: steps.secrets.outputs.ready == 'true'
         with:
           path: data/triage.db
           key: triage-db-${{ github.run_id }}
           restore-keys: triage-db-
 
       - name: Write config
+        if: steps.secrets.outputs.ready == 'true'
         run: cp config.example.toml config.toml
 
       - name: Run digest
+        if: steps.secrets.outputs.ready == 'true'
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           GMAIL_CLIENT_ID: ${{ secrets.GMAIL_CLIENT_ID }}
